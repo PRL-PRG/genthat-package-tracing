@@ -1,0 +1,25 @@
+library(methods)
+library(covr)
+
+with_time <- function(expr) {
+  time <- Sys.time()
+  result <- force(expr)
+  time <- Sys.time() - time
+
+  attr(result, "time") <- time
+  result
+}
+
+compute_coverage <- function(path, type, output) {
+    coverage <- with_time(tally_coverage(package_coverage(path, type="tests")))
+    saveRDS(coverage, output)
+
+    invisible(NULL)
+}
+
+run_genthat <- function(path, output) {
+    result <- with_time(gen_from_package(path))
+    saveRDS(result, output)
+
+    invisible(NULL)
+}

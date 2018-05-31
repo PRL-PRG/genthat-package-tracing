@@ -1,0 +1,31 @@
+SRC_BASE := ~/CRAN
+COVERAGE_TESTS := coverage-tests.RDS
+COVERAGE_ALL := coverage-all.RDS
+GENTHAT := genthat.RDS
+ALL := $(COVERAGE_TESTS) $(COVERAGE_ALL) $(GENTHAT)
+
+package := $(shell basename $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST)))))
+package_path := $(SRC_BASE)/$(package)
+
+.PHONY: coverage-tests coverage-all genthat all clean
+
+all: $(COVERAGE_TESTS) $(COVERAGE_ALL) $(GENTHAT)
+
+$(COVERAGE_TESTS):
+	Rscript -e 'compute_coverage("$(package_path)", type="tests", output="$(COVERAGE_TESTS)")'
+
+$(COVERAGE_ALL):
+	Rscript -e 'compute_coverage("$(package_path)", type="all", output="$(COVERAGE_ALL)")'
+
+$(GENTHAT):
+	Rscript -e 'run_genthat("$(package_path)", output="$(GENTHAT)")'
+
+coverage-tests: $(COVERAGE_TESTS)
+coverage-all: $(COVERAGE_ALL)
+genthat: $(GENTHAT)
+
+clean:
+	-rm -f $(ALL)
+	-rm -f $(subst .RDS,,$(ALL))
+	-rm -f $(subst .RDS,.err,$(ALL))
+	-rm -f $(subst .RDS,.seq,$(ALL))
