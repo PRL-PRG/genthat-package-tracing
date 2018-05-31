@@ -4,13 +4,15 @@ Running genthat on CRAN packages
 
 ## Usage
 
-### Tracing
-
-Make sure the DB is up and running using `./start-mysql.sh`
+### Generate packages files
 
 ```sh
-$ mkdir runs/cran-top-100
-$ cd runs/cran-top-100
-$ ../../cran-top-n.R 100 > packages.txt
-$ parallel --bar --results jobs --joblog jobs.log -j4 -a packages.txt --timeout 3600 ../../trace-package.sh ::: examples tests vignettes
+Rscript -e "writeLines(installed.packages()[,1], 'packages-all.txt')"
+Rscript -e "writeLines(sample(installed.packages()[,1], 10), 'packages-10.txt')"
+```
+
+### Tracing
+
+```sh
+make all PACKAGE_FILE=packages-10.txt
 ```
