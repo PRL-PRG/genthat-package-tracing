@@ -5,22 +5,26 @@ PACKAGE_FILE := packages.txt
 JOBS_FILE := jobsfile.txt
 PACKAGES := $(shell cat $(PACKAGE_FILE))
 
+# parallel exit code is based on how many jobs has failed
+# there will for sure be some so we just say keep going
 define parallel =
-parallel \
+-parallel \
   -j jobsfile.txt \
   -a "$(PACKAGE_FILE)" \
   --shuf \
   --files \
   --bar \
+  --tagstring "$@ - {}:" \
   --result "$(RUNDIR)/{}/$@" \
   --joblog "$(LOGDIR)/$@.log" \
   --timeout $(TIMEOUT) \
-  make -C "$(RUNDIR)/{1}" $@
+  make -C "$(RUNDIR)/{1}"
 endef
 
 .PHONY: bootstrap coverage-tests coverage-all all clean distclean
 
-all: bootstrap coverage-tests coverage-all
+all: bootstrap
+	$(parallel) "{2}" ::: coverage-tests coverage-all
 
 bootstrap:
 	-mkdir -p $(LOGDIR)
@@ -33,11 +37,11 @@ bootstrap:
 	done
 
 coverage-tests:
-	$(parallel)
+	$(parallel) $@
 coverage-all:
-	$(parallel)
+	$(parallel) $@
 genthat:
-	$(parallel)
+	$(parallel) $@
 
 clean:
 	@for dir in $(PACKAGES); do \
@@ -47,3 +51,7 @@ clean:
 distclean:
 	-rm -fr $(LOGDIR)
 	-rm -fr $(RUNDIR)
+
+# TODO: bootstrap a single package
+%:
+	$(MAKE) -C $(RUNDIR)/$@ all
