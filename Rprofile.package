@@ -1,5 +1,12 @@
 library(methods)
 library(covr)
+library(devtools)
+library(readr)
+library(stringr)
+library(purrr)
+library(pbapply)
+
+suppressWarnings(suppressMessages(suppressPackageStartupMessages(library(dplyr))))
 
 with_time <- function(expr) {
   time <- Sys.time()
@@ -23,3 +30,38 @@ run_genthat <- function(path, output) {
 
     invisible(NULL)
 }
+
+run_cloc <- function(paths) {
+    if (length(paths) > 0) {
+        out <- system2("cloc", c("--quiet", "--csv", paths), stdout=TRUE)
+
+        if (length(out) > 2) {
+            # the cloc output includes header copyright which makes it unparseable
+            # we have to skip the first two lines and add our own header
+            con <- str_c(c("files,language,blank,comment,code", out[c(-1, -2)], ""), collapse="\n")
+            return(read_csv(con))
+        }
+    }
+
+    data_frame(files=integer(), language=character(), blank=integer(), comment=integer(), code=integer())
+}
+
+compute_sloc <- function(path, output) {
+    package <- as.package(path)
+    paths <- file.path(path, c("R", "src"))
+    paths <- paths[file.exists(paths)]
+
+    sloc <- run_cloc(paths)
+    df <- mutate(sloc, package=package$package)
+    df <- select(df, package, everything())
+    write_csv(df, output)
+
+    invisible(NULL)
+}
+
+merge_csv <- function(csvs, output) {
+    dfs <- pblapply(csvs, read_csv, col_types=cols(package="c", files="i", language="c", blank="i", comment="i", code="i"), cl=32)
+    df <- bind_rows(dfs)
+    write_csv(df, output)
+}
+

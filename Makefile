@@ -1,57 +1,68 @@
-TIMEOUT := 3h 
-RUNDIR := run
-LOGDIR := logs
+SHELL = /bin/bash
+TIMEOUT := 3h
+RUN_DIR := run
+LOG_DIR := logs
 PACKAGE_FILE := packages.txt
 JOBS_FILE := jobsfile.txt
-PACKAGES := $(shell cat $(PACKAGE_FILE))
 
-# parallel exit code is based on how many jobs has failed
-# there will for sure be some so we just say keep going
+SLOC := sloc.csv
+
+packages := $(shell cat $(PACKAGE_FILE))
+packages_dir := $(addprefix $(RUN_DIR)/, $(packages))
+current_dir := $(strip $(dir $(realpath $(lastword $(MAKEFILE_LIST)))))
+package_makefile := $(current_dir)/Makefile.package
+rprofile := $(current_dir)/Rprofile.package
+
+# parallel exit code is based on how many jobs has failed there will for sure be
+# some so we just say keep going this will run make on each package with tasks
+# given in as parameters
 define parallel =
--parallel \
-  -j jobsfile.txt \
+R_PROFILE_USER=$(rprofile) \
+parallel \
+  -j "$(JOBS_FILE)" \
   -a "$(PACKAGE_FILE)" \
   --shuf \
   --files \
   --bar \
   --tagstring "$@ - {}:" \
-  --result "$(RUNDIR)/{}/$@" \
-  --joblog "$(LOGDIR)/$@.log" \
+  --result "$(RUN_DIR)/{1}/{2}" \
+  --joblog "$(LOG_DIR)/$@.log" \
   --timeout $(TIMEOUT) \
-  make -C "$(RUNDIR)/{1}"
+  make $(MFLAGS) -C "$(RUN_DIR)/{1}" -f $(package_makefile) "{2}" \
+  :::
 endef
 
 .PHONY: bootstrap coverage-tests coverage-all all clean distclean
 
 all: bootstrap
-	$(parallel) "{2}" ::: coverage-tests coverage-all
+	-$(parallel) coverage-tests coverage-all sloc
 
-bootstrap:
-	-mkdir -p $(LOGDIR)
-	-mkdir -p $(RUNDIR)
-	@for pkg in $(PACKAGES); do \
-		echo $$pkg; \
-		[ -d $(RUNDIR)/$$pkg ] || mkdir $(RUNDIR)/$$pkg; \
-		[ -L $(RUNDIR)/$$pkg/Makefile ] || ln -s ../../Makefile.package $(RUNDIR)/$$pkg/Makefile; \
-		[ -L $(RUNDIR)/$$pkg/.Rprofile ] || ln -s ../../Rprofile.package $(RUNDIR)/$$pkg/.Rprofile; \
-	done
+$(LOG_DIR):
+	mkdir -p $(LOG_DIR)
 
-coverage-tests:
-	$(parallel) $@
-coverage-all:
-	$(parallel) $@
-genthat:
-	$(parallel) $@
+$(packages_dir):
+	mkdir -p $@
+
+$(SLOC): bootstrap
+	-$(parallel) sloc
+	R_PROFILE_USER=$(rprofile) \
+	Rscript -e 'merge_csv(list.files("$(RUN_DIR)", pattern="$(SLOC)", full.names=T, recursive=T), "$(SLOC)")'
+
+bootstrap: $(LOG_DIR) $(packages_dir)
+
+coverage-tests: bootstrap
+	-$(parallel) $@
+coverage-all: bootstrap
+	-$(parallel) $@
+genthat: bootstrap
+	-$(parallel) $@
+sloc: $(SLOC)
 
 clean:
-	@for dir in $(PACKAGES); do \
-		$(MAKE) -C $(RUNDIR)/$$dir clean; \
+	@for dir in $(packages); do \
+		$(MAKE) -C $(RUN_DIR)/$$dir -f $(package_makefile) clean; \
 	done
 
 distclean:
-	-rm -fr $(LOGDIR)
-	-rm -fr $(RUNDIR)
-
-# TODO: bootstrap a single package
-%:
-	$(MAKE) -C $(RUNDIR)/$@ all
+	-rm -fr $(LOG_DIR)
+	-rm -fr $(RUN_DIR)

@@ -10954,5 +10954,3 @@ survival
 tcltk
 tools
 utils
-formatR
-genthat

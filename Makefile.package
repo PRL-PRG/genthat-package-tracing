@@ -1,15 +1,16 @@
-SRC_BASE := ~/CRAN
+SRC_BASE := /mnt/nvme0/R/CRAN-extracted
 COVERAGE_TESTS := coverage-tests.RDS
 COVERAGE_ALL := coverage-all.RDS
 GENTHAT := genthat.RDS
-ALL := $(COVERAGE_TESTS) $(COVERAGE_ALL) $(GENTHAT)
+SLOC := sloc.csv
+ALL := $(COVERAGE_TESTS) $(COVERAGE_ALL) $(GENTHAT) $(SLOC)
 
-package := $(shell basename $(shell dirname $(abspath $(lastword $(MAKEFILE_LIST)))))
+package := $(shell basename $(shell pwd))
 package_path := $(SRC_BASE)/$(package)
 
-.PHONY: coverage-tests coverage-all genthat all clean
+.PHONY: coverage-tests coverage-all genthat sloc all clean
 
-all: $(COVERAGE_TESTS) $(COVERAGE_ALL) $(GENTHAT)
+all: $(COVERAGE_TESTS) $(COVERAGE_ALL) $(GENTHAT) $(SLOC)
 
 $(COVERAGE_TESTS):
 	Rscript -e 'compute_coverage("$(package_path)", type="tests", output="$(COVERAGE_TESTS)")'
@@ -18,11 +19,15 @@ $(COVERAGE_ALL):
 	Rscript -e 'compute_coverage("$(package_path)", type="all", output="$(COVERAGE_ALL)")'
 
 $(GENTHAT):
-	Rscript -e 'run_genthat("$(package_path)", output="$(GENTHAT)")'
+	@echo "TBA"
+
+$(SLOC):
+	Rscript -e 'compute_sloc("$(package_path)", "$(SLOC)")'
 
 coverage-tests: $(COVERAGE_TESTS)
 coverage-all: $(COVERAGE_ALL)
 genthat: $(GENTHAT)
+sloc: $(SLOC)
 
 clean:
 	-rm -f $(ALL)
