@@ -1,36 +1,55 @@
+LIB_BASE := /mnt/nvme0/R/x86_64-pc-linux-gnu-library/3.5
 SRC_BASE := /mnt/nvme0/R/CRAN-extracted
-COVERAGE_TESTS := coverage-tests.RDS
-COVERAGE_ALL := coverage-all.RDS
 GENTHAT := genthat.RDS
 SLOC := sloc.csv
-ALL := $(COVERAGE_TESTS) $(COVERAGE_ALL) $(GENTHAT) $(SLOC)
+EXTRACTED_CODE := extracted-code
+COVERAGES := coverage-examples.RDS \
+             coverage-tests.RDS \
+             coverage-vignettes.RDS \
+             coverage-extracted-examples.RDS \
+             coverage-extracted-tests.RDS \
+             coverage-extracted-vignettes.RDS
+
+ALL := $(EXTRACTED_CODE) $(COVERAGES) $(GENTHAT) $(SLOC)
 
 package := $(shell basename $(shell pwd))
 package_path := $(SRC_BASE)/$(package)
 
-.PHONY: coverage-tests coverage-all genthat sloc all clean
+.PHONY: extract-code coverage-examples coverage-tests coverage-vignettes coverage-all coverage genthat sloc all clean
 
 all: $(COVERAGE_TESTS) $(COVERAGE_ALL) $(GENTHAT) $(SLOC)
 
-$(COVERAGE_TESTS):
-	Rscript -e 'compute_coverage("$(package_path)", type="tests", output="$(COVERAGE_TESTS)")'
+$(EXTRACTED_CODE):
+	Rscript -e 'extract_code("$(package)", output="$(EXTRACTED_CODE)")'
 
-$(COVERAGE_ALL):
-	Rscript -e 'compute_coverage("$(package_path)", type="all", output="$(COVERAGE_ALL)")'
+coverage-%.RDS: $(EXTRACTED_CODE)
+	Rscript -e 'compute_coverage("$(package_path)", type="$(subst coverage-,,$(basename $@))", output="$@")'
 
-$(GENTHAT):
-	@echo "TBA"
+$(GENTHAT): $(EXTRACTED_CODE)
+	R_LIBS=$(LIB_BASE) \
+	Rscript -e 'run_genthat("$(package_path)", "$(GENTHAT)")'
 
-$(SLOC):
-	Rscript -e 'compute_sloc("$(package_path)", "$(SLOC)")'
+$(SLOC): $(EXTRACTED_CODE)
+	Rscript -e 'compute_sloc("$(package_path)", "$(EXTRACTED_CODE)", "$(SLOC)")'
 
-coverage-tests: $(COVERAGE_TESTS)
-coverage-all: $(COVERAGE_ALL)
+extract-code: $(EXTRACTED_CODE)
+
+coverage-examples: coverage-examples.RDS coverage-extracted-examples.RDS
+
+coverage-tests: coverage-tests.RDS coverage-extracted-tests.RDS
+
+coverage-vignettes: coverage-vignettes.RDS coverage-extracted-vignettes.RDS
+
+coverage-all: coverage-all.RDS coverage-extracted-all.RDS
+
+coverage: coverage-examples coverage-tests coverage-vignettes coverage-all
+
 genthat: $(GENTHAT)
+
 sloc: $(SLOC)
 
 clean:
-	-rm -f $(ALL)
-	-rm -f $(subst .RDS,,$(ALL))
-	-rm -f $(subst .RDS,.err,$(ALL))
-	-rm -f $(subst .RDS,.seq,$(ALL))
+	-rm -fr $(ALL)
+	-rm -f extract-code coverage-all coverage-examples coverage-tests coverage-vignettes
+	-rm -f *.err *.seq
+

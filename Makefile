@@ -1,5 +1,5 @@
 SHELL = /bin/bash
-TIMEOUT := 3h
+TIMEOUT := 5h
 RUN_DIR := run
 LOG_DIR := logs
 PACKAGE_FILE := packages.txt
@@ -32,7 +32,7 @@ parallel \
   :::
 endef
 
-.PHONY: bootstrap coverage-tests coverage-all all clean distclean
+.PHONY: bootstrap coverage-examples coverage-tests coverage-vignettes coverage-all coverage all clean distclean
 
 all: bootstrap
 	-$(parallel) coverage-tests coverage-all sloc
@@ -46,16 +46,31 @@ $(packages_dir):
 $(SLOC): bootstrap
 	-$(parallel) sloc
 	R_PROFILE_USER=$(rprofile) \
-	Rscript -e 'merge_csv(list.files("$(RUN_DIR)", pattern="$(SLOC)", full.names=T, recursive=T), "$(SLOC)")'
+	Rscript -e 'merge_csv(list.files("$(RUN_DIR)", pattern="$(SLOC)", full.names=T, recursive=T), "$(SLOC)", cols(package="c", files="i", language="c", blank="i", comment="i", code="i"))'
 
 bootstrap: $(LOG_DIR) $(packages_dir)
 
+extract-code: bootstrap
+	-$(parallel) $@
+
+coverage-examples: bootstrap
+	-$(parallel) $@
+
 coverage-tests: bootstrap
 	-$(parallel) $@
+
+coverage-vignettes: bootstrap
+	-$(parallel) $@
+
 coverage-all: bootstrap
 	-$(parallel) $@
+
+coverage: bootstrap
+	-$(parallel) coverage-examples coverage-tests coverage-vignettes coverage-all
+
 genthat: bootstrap
 	-$(parallel) $@
+
 sloc: $(SLOC)
 
 clean:

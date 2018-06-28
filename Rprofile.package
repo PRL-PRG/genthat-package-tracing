@@ -1,10 +1,13 @@
 library(methods)
 library(covr)
+library(genthat)
 library(devtools)
 library(readr)
 library(stringr)
 library(purrr)
 library(pbapply)
+
+EXTRACTED_CODE <- "extracted-code"
 
 suppressWarnings(suppressMessages(suppressPackageStartupMessages(library(dplyr))))
 
@@ -18,14 +21,27 @@ with_time <- function(expr) {
 }
 
 compute_coverage <- function(path, type, output) {
-    coverage <- with_time(tally_coverage(package_coverage(path, type="tests")))
+    if (startsWith(type, "extracted-")) {
+        type <- substr(type, nchar("extracted-")+1, nchar(type))
+        type <- match.arg(type, c("examples", "tests", "vignettes", "all"))
+
+        dir <- if (type == "all") EXTRACTED_CODE else file.path(EXTRACTED_CODE, type)
+        files <- list.files(dir, "\\.[R|r]$", full.names=TRUE, recursive=TRUE)
+        code <- paste0("tryCatch(source('", files, "', local=TRUE), error=function(e) {})", collapse="\n")
+
+        coverage <- with_time(tally_coverage(package_coverage(path, type="none", code=code)))
+    } else {
+        coverage <- with_time(tally_coverage(package_coverage(path, type=type)))
+    }
     saveRDS(coverage, output)
 
     invisible(NULL)
 }
 
 run_genthat <- function(path, output) {
-    result <- with_time(gen_from_package(path))
+    files <- list.files(EXTRACTED_CODE, "\\.[R|r]$", full.names=TRUE, recursive=TRUE)
+    result <- with_time(gen_from_source(path, files, action="generate", output_dir="genthat-tests"))
+
     saveRDS(result, output)
 
     invisible(NULL)
@@ -46,22 +62,45 @@ run_cloc <- function(paths) {
     data_frame(files=integer(), language=character(), blank=integer(), comment=integer(), code=integer())
 }
 
-compute_sloc <- function(path, output) {
-    package <- as.package(path)
-    paths <- file.path(path, c("R", "src"))
-    paths <- paths[file.exists(paths)]
+compute_sloc <- function(package_path, extracted_path, output) {
+    do_compute <- function(type, paths) {
+        paths <- paths[file.exists(paths)]
 
-    sloc <- run_cloc(paths)
-    df <- mutate(sloc, package=package$package)
-    df <- select(df, package, everything())
+        sloc <- run_cloc(paths)
+        if (nrow(sloc) == 0) {
+            sloc <- data_frame(type=type, files=0L, language="R", blank=0L, comment=0L, code=0L)
+        } else {
+            sloc <- mutate(sloc, type=type)
+        }
+    }
+
+    package <- as.package(package_path)
+    paths <- file.path(package_path, c("R", "src"))
+
+    types <- list(
+        list("package", paths),
+        list("examples", file.path(extracted_path, "examples")),
+        list("tests", file.path(extracted_path, "tests")),
+        list("vignettes", file.path(extracted_path, "vignettes")),
+        list("all", extracted_path)
+    )
+
+    df <- map_dfr(types, function(x) do_compute(x[[1]], x[[2]]))
+    df <- mutate(df, package=package$package)
+    df <- select(df, package, type, everything())
+
     write_csv(df, output)
 
     invisible(NULL)
 }
 
-merge_csv <- function(csvs, output) {
-    dfs <- pblapply(csvs, read_csv, col_types=cols(package="c", files="i", language="c", blank="i", comment="i", code="i"), cl=32)
+merge_csv <- function(files, output, col_types) {
+    dfs <- pblapply(files, read_csv, col_types=col_types, cl=32)
     df <- bind_rows(dfs)
     write_csv(df, output)
+}
+
+extract_code <- function(package, output) {
+    extract_package_code(package=package, lib_paths="/mnt/nvme0/R/x86_64-pc-linux-gnu-library/3.5", types="all", output_dir=output)
 }
 

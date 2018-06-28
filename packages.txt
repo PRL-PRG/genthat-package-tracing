@@ -1,3 +1,1 @@
 stringr
-stringi
-devtools
